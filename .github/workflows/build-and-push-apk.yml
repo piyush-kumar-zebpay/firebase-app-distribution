@@ -59,17 +59,17 @@ jobs:
           Groups: ${{ github.event.inputs.tester_groups }}
           EOF
 
-      - name: Decode Google Services JSON
+      - name: Create Google Services JSON
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
-          echo "$GOOGLE_SERVICES_JSON" | base64 -d > app/google-services.json
+          echo "$GOOGLE_SERVICES_JSON" > app/google-services.json
 
-      - name: Decode Firebase Service Account Key
+      - name: Create Firebase Service Account Key
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: |
-          echo "$FIREBASE_SERVICE_ACCOUNT" | base64 -d > service-key.json
+          echo "$FIREBASE_SERVICE_ACCOUNT" > service-key.json
 
       - name: Build APK
         run: ./gradlew assemble${{ github.event.inputs.build_type }}
