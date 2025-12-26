@@ -20,7 +20,7 @@ set -e  # Exit immediately if a command exits with a non-zero status
 # Project Paths
 APP_MODULE_DIR="app"
 BUILD_GRADLE="${APP_MODULE_DIR}/build.gradle.kts"
-RELEASE_NOTES_DIR="${APP_MODULE_DIR}/build"
+RELEASE_NOTES_DIR="${APP_MODULE_DIR}"
 RELEASE_NOTES_FILE="${RELEASE_NOTES_DIR}/release-notes.txt"
 
 # Default Options

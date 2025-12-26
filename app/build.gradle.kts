@@ -35,8 +35,8 @@ android {
         debug {
             firebaseAppDistribution {
                 serviceCredentialsFile = rootProject.file("service-key.json").absolutePath
-                releaseNotesFile = rootProject.file("./app/build/release-notes.txt").absolutePath
-                val releaseNotesFile = rootProject.file("./app/build/release-notes.txt")
+                releaseNotesFile = rootProject.file("./app/release-notes.txt").absolutePath
+                val releaseNotesFile = rootProject.file("./app/release-notes.txt")
                 val groupsFromFile = try {
                     releaseNotesFile.readLines()
                         .find { it.startsWith("Groups:") }
