@@ -74,7 +74,10 @@ jobs:
         run: ./gradlew assemble${{ github.event.inputs.build_type }}
 
       - name: Upload APK to Firebase App Distribution
-        run: ./gradlew appDistributionUpload${{ github.event.inputs.build_type }}
+        run: |
+          ./gradlew appDistributionUpload${{ github.event.inputs.build_type }} \
+            --releaseNotesFile=app/release-notes.txt \
+            --groups="${{ github.event.inputs.tester_groups }}"
         env:
           GOOGLE_APPLICATION_CREDENTIALS: service-key.json
 
@@ -83,11 +86,4 @@ jobs:
         with:
           name: app-${{ github.event.inputs.build_type }}-${{ github.run_number }}
           path: app/build/outputs/apk/**/*.apk
-          retention-days: 30
-
-      - name: Upload Release Notes as Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-notes-${{ github.event.inputs.build_type }}-${{ github.run_number }}
-          path: app/release-notes.txt
           retention-days: 30
