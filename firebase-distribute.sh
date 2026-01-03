@@ -249,6 +249,50 @@ show_text_input() {
     MENU_RESULT="${user_input:-$default_value}"
 }
 
+show_multiline_input() {
+    local prompt="$1"
+    local default_value="$2"
+    local prev_info="$3"
+    
+    clear
+    show_banner
+    [ -n "$prev_info" ] && { echo -e "$prev_info"; echo ""; }
+    
+    echo -e "  ${WHITE}$prompt${RESET}"
+    echo -e "  ${DARK_GRAY}Enter multiple lines. Press ${ORANGE}Enter twice${DARK_GRAY} (empty line) to finish.${RESET}"
+    echo -e "  ${DARK_GRAY}Leave empty and press Enter for default.${RESET}"
+    echo ""
+    
+    local lines=""
+    local line_count=0
+    
+    while true; do
+        echo -e -n "    ${ORANGE}${ICON_ARROW}${RESET} "
+        read -r line
+        
+        # If first line is empty, use default
+        if [ $line_count -eq 0 ] && [ -z "$line" ]; then
+            MENU_RESULT="$default_value"
+            return
+        fi
+        
+        # Empty line after content means done
+        if [ -z "$line" ] && [ $line_count -gt 0 ]; then
+            break
+        fi
+        
+        # Append line
+        if [ $line_count -eq 0 ]; then
+            lines="$line"
+        else
+            lines="$lines\\n$line"
+        fi
+        line_count=$((line_count + 1))
+    done
+    
+    MENU_RESULT="$lines"
+}
+
 # ==============================================================================
 # 5. MAIN EXECUTION FLOW
 # ==============================================================================
@@ -259,10 +303,13 @@ show_single_select_menu "Select build type" "" "Debug" "Release"
 BUILD_TYPE="$MENU_RESULT"
 INFO_1="  ${ORANGE}${ICON_SUCCESS}${RESET} Build type: $BUILD_TYPE"
 
-# --- Step 2: Enter Description ---
-show_text_input "Enter release description" "$DEFAULT_DESCRIPTION" "$INFO_1"
+# --- Step 2: Enter Description (Multiline) ---
+show_multiline_input "Enter release description" "$DEFAULT_DESCRIPTION" "$INFO_1"
 DESCRIPTION="$MENU_RESULT"
-INFO_2="${INFO_1}\n  ${ORANGE}${ICON_SUCCESS}${RESET} Description: $DESCRIPTION"
+# Show first line only in info summary
+DESCRIPTION_PREVIEW=$(echo -e "$DESCRIPTION" | head -n1)
+[ "$(echo -e "$DESCRIPTION" | wc -l)" -gt 1 ] && DESCRIPTION_PREVIEW="${DESCRIPTION_PREVIEW}..."
+INFO_2="${INFO_1}\n  ${ORANGE}${ICON_SUCCESS}${RESET} Description: $DESCRIPTION_PREVIEW"
 
 # --- Step 3: Select Groups ---
 show_multi_select_menu "Select tester group(s)" "$INFO_2" "${DEFAULT_TESTER_GROUPS[@]}"
@@ -280,12 +327,15 @@ SUMMARY_TEXT="    Build Type   $BUILD_TYPE
 
 # --- Step 5: Save Release Notes ---
 mkdir -p "$RELEASE_NOTES_DIR"
+
+# Save all info to single release-notes.txt with description after marker
 cat > "$RELEASE_NOTES_FILE" << EOF
 BuildType: $BUILD_TYPE
 Branch: $GIT_BRANCH
-Description: $DESCRIPTION
 Author: $GIT_AUTHOR
 Groups: $SELECTED_GROUPS
+---
+$(echo -e "$DESCRIPTION")
 EOF
 
 # --- Step 6: Confirmation ---
@@ -341,3 +391,65 @@ else
     echo -e "  ${RED}X Upload failed${RESET}"
     exit 1
 fi
+
+# --- Step 8: Send Slack Notification ---
+SLACK_WEBHOOK_URL="$(cat ./webhook-url.txt)"
+FIREBASE_CONSOLE_URL="https://console.firebase.google.com/project/_/appdistribution"
+TIMESTAMP=$(date +%s)
+
+# Read release notes
+BUILD_TYPE_VAL=$(grep "^BuildType:" ./app/release-notes.txt | cut -d' ' -f2-)
+BRANCH_VAL=$(grep "^Branch:" ./app/release-notes.txt | cut -d' ' -f2-)
+AUTHOR_VAL=$(grep "^Author:" ./app/release-notes.txt | cut -d' ' -f2-)
+GROUPS_VAL=$(grep "^Groups:" ./app/release-notes.txt | cut -d' ' -f2-)
+
+# Read multiline description (everything after --- marker) and format for Slack
+DESCRIPTION_VAL=""
+IN_DESCRIPTION=false
+while IFS= read -r line || [ -n "$line" ]; do
+    if [ "$line" = "---" ]; then
+        IN_DESCRIPTION=true
+        continue
+    fi
+    if [ "$IN_DESCRIPTION" = true ]; then
+        # Escape special characters for JSON
+        line=$(echo "$line" | sed 's/\\/\\\\/g; s/"/\\"/g')
+        if [ -z "$DESCRIPTION_VAL" ]; then
+            DESCRIPTION_VAL=">$line"
+        else
+            DESCRIPTION_VAL="$DESCRIPTION_VAL\\n>$line"
+        fi
+    fi
+done < ./app/release-notes.txt
+
+# Build JSON payload
+JSON_PAYLOAD=$(cat <<EOF
+{
+  "text": "New APK Build Available",
+  "blocks": [
+    {"type":"header","text":{"type":"plain_text","text":"New APK Build Available","emoji":true}},
+    {"type":"divider"},
+    {"type":"section","text":{"type":"mrkdwn","text":"*Build Type:*  \`${BUILD_TYPE_VAL}\`"}},
+    {"type":"section","text":{"type":"mrkdwn","text":"*Branch:*  \`${BRANCH_VAL}\`"}},
+    {"type":"section","text":{"type":"mrkdwn","text":"*Author:*  ${AUTHOR_VAL}"}},
+    {"type":"section","text":{"type":"mrkdwn","text":"*Tester Groups:*  \`${GROUPS_VAL}\`"}},
+    {"type":"section","text":{"type":"mrkdwn","text":"*Description:*\n${DESCRIPTION_VAL}"}},
+    {"type":"divider"},
+    {"type":"section","text":{"type":"mrkdwn","text":"*View this release in Firebase Console*"},"accessory":{"type":"button","text":{"type":"plain_text","text":"Open Console","emoji":true},"url":"${FIREBASE_CONSOLE_URL}","style":"primary"}},
+    {"type":"divider"},
+    {"type":"context","elements":[{"type":"mrkdwn","text":"*Firebase App Distribution* | <!date^${TIMESTAMP}^{date_short_pretty} at {time}|Posted>"}]}
+  ]
+}
+EOF
+)
+
+curl -k -X POST \
+  -H "Content-Type: application/json" \
+  --data "$JSON_PAYLOAD" \
+  "$SLACK_WEBHOOK_URL"
+
+echo ""
+echo -e "  ${ORANGE}${ICON_SUCCESS}${RESET} Slack notification sent"
+
+
+

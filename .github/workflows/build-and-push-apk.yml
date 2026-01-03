@@ -87,3 +87,32 @@ jobs:
           name: app-${{ github.event.inputs.build_type }}-${{ github.run_number }}
           path: app/build/outputs/apk/**/*.apk
           retention-days: 30
+
+      - name: Send Slack Notification
+        if: success()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          TIMESTAMP=$(date +%s)
+          FIREBASE_CONSOLE_URL="https://console.firebase.google.com/project/_/appdistribution"
+          
+          # Escape description for JSON (handle multiline)
+          DESCRIPTION=$(echo '${{ github.event.inputs.release_description }}' | sed 's/\\/\\\\/g; s/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n>/g')
+          
+          curl -X POST -H 'Content-type: application/json' \
+            --data '{
+              "text": "New APK Build Available",
+              "blocks": [
+                {"type":"header","text":{"type":"plain_text","text":"New APK Build Available","emoji":true}},
+                {"type":"divider"},
+                {"type":"section","text":{"type":"mrkdwn","text":"*Build Type:*  `${{ github.event.inputs.build_type }}`"}},
+                {"type":"section","text":{"type":"mrkdwn","text":"*Branch:*  `${{ github.ref_name }}`"}},
+                {"type":"section","text":{"type":"mrkdwn","text":"*Author:*  ${{ github.actor }}"}},
+                {"type":"section","text":{"type":"mrkdwn","text":"*Tester Groups:*  `${{ github.event.inputs.tester_groups }}`"}},
+                {"type":"section","text":{"type":"mrkdwn","text":"*Description:*\n>'"$DESCRIPTION"'"}},
+                {"type":"divider"},
+                {"type":"section","text":{"type":"mrkdwn","text":"*View this release in Firebase Console*"},"accessory":{"type":"button","text":{"type":"plain_text","text":"Open Console","emoji":true},"url":"'"$FIREBASE_CONSOLE_URL"'","style":"primary"}},
+                {"type":"divider"},
+                {"type":"context","elements":[{"type":"mrkdwn","text":"*Firebase App Distribution* | <!date^'"$TIMESTAMP"'^{date_short_pretty} at {time}|Posted>"}]}
+              ]
+            }' "$SLACK_WEBHOOK_URL"
