@@ -48,16 +48,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      - name: Create release notes
-        run: |
-          cat > app/release-notes.txt << EOF
-          BuildType: ${{ github.event.inputs.build_type }}
-          Branch: ${{ github.ref_name }}
-          Description: ${{ github.event.inputs.release_description }}
-          Author: ${{ github.actor }}
-          Groups: ${{ github.event.inputs.tester_groups }}
-          EOF
-
       - name: Create Google Services JSON
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
@@ -75,8 +65,15 @@ jobs:
 
       - name: Upload APK to Firebase App Distribution
         run: |
+          RELEASE_NOTES="BuildType: ${{ github.event.inputs.build_type }}
+          Branch: ${{ github.ref_name }}
+          Author: ${{ github.actor }}
+          Groups: ${{ github.event.inputs.tester_groups }}
+          ---
+          ${{ github.event.inputs.release_description }}"
+          
           ./gradlew appDistributionUpload${{ github.event.inputs.build_type }} \
-            --releaseNotesFile=app/release-notes.txt \
+            --releaseNotes="$RELEASE_NOTES" \
             --groups="${{ github.event.inputs.tester_groups }}"
         env:
           GOOGLE_APPLICATION_CREDENTIALS: service-key.json

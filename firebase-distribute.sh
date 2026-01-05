@@ -20,8 +20,6 @@ set -e  # Exit immediately if a command exits with a non-zero status
 # Project Paths
 APP_MODULE_DIR="app"
 BUILD_GRADLE="${APP_MODULE_DIR}/build.gradle.kts"
-RELEASE_NOTES_DIR="${APP_MODULE_DIR}"
-RELEASE_NOTES_FILE="${RELEASE_NOTES_DIR}/release-notes.txt"
 
 # Default Options
 DEFAULT_DESCRIPTION="No description provided"
@@ -325,18 +323,13 @@ SUMMARY_TEXT="    Build Type   $BUILD_TYPE
     Branch       $GIT_BRANCH
     Author       $GIT_AUTHOR"
 
-# --- Step 5: Save Release Notes ---
-mkdir -p "$RELEASE_NOTES_DIR"
-
-# Save all info to single release-notes.txt with description after marker
-cat > "$RELEASE_NOTES_FILE" << EOF
-BuildType: $BUILD_TYPE
+# --- Step 5: Build Release Notes String ---
+RELEASE_NOTES="BuildType: $BUILD_TYPE
 Branch: $GIT_BRANCH
 Author: $GIT_AUTHOR
 Groups: $SELECTED_GROUPS
 ---
-$(echo -e "$DESCRIPTION")
-EOF
+$(echo -e "$DESCRIPTION")"
 
 # --- Step 6: Confirmation ---
 show_confirm_menu "$SUMMARY_TEXT"
@@ -357,7 +350,7 @@ echo -e "  ${DARK_GRAY}----------------------------------------${RESET}"
 echo -e "  ${WHITE}Building & Uploading${RESET}"
 echo -e "  ${DARK_GRAY}----------------------------------------${RESET}"
 echo ""
-echo -e "  ${ORANGE}${ICON_SUCCESS}${RESET} Release notes saved"
+echo -e "  ${ORANGE}${ICON_SUCCESS}${RESET} Release notes prepared"
 echo ""
 
 # Run Assembler
@@ -378,7 +371,7 @@ fi
 echo ""
 echo -e "  ${ORANGE}${ICON_ARROW}${RESET} ${DARK_GRAY}Running${RESET} ${ORANGE}./gradlew appDistributionUpload${BUILD_TYPE}${RESET}"
 echo ""
-./gradlew "appDistributionUpload${BUILD_TYPE}"
+./gradlew "appDistributionUpload${BUILD_TYPE}" --releaseNotes="$RELEASE_NOTES" --groups="$SELECTED_GROUPS"
 
 if [ $? -eq 0 ]; then
     echo ""
@@ -397,43 +390,30 @@ SLACK_WEBHOOK_URL="$(cat ./webhook-url.txt)"
 FIREBASE_CONSOLE_URL="https://console.firebase.google.com/project/_/appdistribution"
 TIMESTAMP=$(date +%s)
 
-# Read release notes
-BUILD_TYPE_VAL=$(grep "^BuildType:" ./app/release-notes.txt | cut -d' ' -f2-)
-BRANCH_VAL=$(grep "^Branch:" ./app/release-notes.txt | cut -d' ' -f2-)
-AUTHOR_VAL=$(grep "^Author:" ./app/release-notes.txt | cut -d' ' -f2-)
-GROUPS_VAL=$(grep "^Groups:" ./app/release-notes.txt | cut -d' ' -f2-)
-
-# Read multiline description (everything after --- marker) and format for Slack
-DESCRIPTION_VAL=""
-IN_DESCRIPTION=false
+# Format description for Slack (add > prefix for quote formatting)
+DESCRIPTION_SLACK=""
 while IFS= read -r line || [ -n "$line" ]; do
-    if [ "$line" = "---" ]; then
-        IN_DESCRIPTION=true
-        continue
+    # Escape special characters for JSON
+    line=$(echo "$line" | sed 's/\\/\\\\/g; s/"/\\"/g')
+    if [ -z "$DESCRIPTION_SLACK" ]; then
+        DESCRIPTION_SLACK=">$line"
+    else
+        DESCRIPTION_SLACK="$DESCRIPTION_SLACK\\n>$line"
     fi
-    if [ "$IN_DESCRIPTION" = true ]; then
-        # Escape special characters for JSON
-        line=$(echo "$line" | sed 's/\\/\\\\/g; s/"/\\"/g')
-        if [ -z "$DESCRIPTION_VAL" ]; then
-            DESCRIPTION_VAL=">$line"
-        else
-            DESCRIPTION_VAL="$DESCRIPTION_VAL\\n>$line"
-        fi
-    fi
-done < ./app/release-notes.txt
+done <<< "$(echo -e "$DESCRIPTION")"
 
-# Build JSON payload
+# Build JSON payload using in-memory variables
 JSON_PAYLOAD=$(cat <<EOF
 {
   "text": "New APK Build Available",
   "blocks": [
     {"type":"header","text":{"type":"plain_text","text":"New APK Build Available","emoji":true}},
     {"type":"divider"},
-    {"type":"section","text":{"type":"mrkdwn","text":"*Build Type:*  \`${BUILD_TYPE_VAL}\`"}},
-    {"type":"section","text":{"type":"mrkdwn","text":"*Branch:*  \`${BRANCH_VAL}\`"}},
-    {"type":"section","text":{"type":"mrkdwn","text":"*Author:*  ${AUTHOR_VAL}"}},
-    {"type":"section","text":{"type":"mrkdwn","text":"*Tester Groups:*  \`${GROUPS_VAL}\`"}},
-    {"type":"section","text":{"type":"mrkdwn","text":"*Description:*\n${DESCRIPTION_VAL}"}},
+    {"type":"section","text":{"type":"mrkdwn","text":"*Build Type:*  \`${BUILD_TYPE}\`"}},
+    {"type":"section","text":{"type":"mrkdwn","text":"*Branch:*  \`${GIT_BRANCH}\`"}},
+    {"type":"section","text":{"type":"mrkdwn","text":"*Author:*  ${GIT_AUTHOR}"}},
+    {"type":"section","text":{"type":"mrkdwn","text":"*Tester Groups:*  \`${SELECTED_GROUPS}\`"}},
+    {"type":"section","text":{"type":"mrkdwn","text":"*Description:*\n${DESCRIPTION_SLACK}"}},
     {"type":"divider"},
     {"type":"section","text":{"type":"mrkdwn","text":"*View this release in Firebase Console*"},"accessory":{"type":"button","text":{"type":"plain_text","text":"Open Console","emoji":true},"url":"${FIREBASE_CONSOLE_URL}","style":"primary"}},
     {"type":"divider"},

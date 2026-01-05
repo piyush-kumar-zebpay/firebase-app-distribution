@@ -16,3 +16,4 @@ local.properties
 service-key.json
 ./app/google-services.json
 webhook-url.txt
+app/release-notes.txt
