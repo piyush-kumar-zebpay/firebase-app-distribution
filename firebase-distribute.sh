@@ -304,7 +304,7 @@ show_multiline_input() {
 # The core logic of the script starts here.
 
 # --- Step 1: Select Environment ---
-show_single_select_menu "Select environment" "" "UAT" "Stage" "Prod"
+show_single_select_menu "Select environment" "" "Uat" "Stage" "Prod"
 FLAVOR="$MENU_RESULT"
 INFO_0="  ${ORANGE}${ICON_SUCCESS}${RESET} Environment: $FLAVOR"
 
@@ -329,16 +329,14 @@ SELECTED_GROUPS="$MENU_RESULT"
 GIT_BRANCH=$(get_git_branch)
 GIT_AUTHOR=$(get_git_author)
 
-SUMMARY_TEXT="    Environment  $FLAVOR
-    Build Type   $BUILD_TYPE
+SUMMARY_TEXT="    Environment  $FLAVOR$BUILD_TYPE
     Description  $DESCRIPTION
     Groups       $SELECTED_GROUPS
     Branch       $GIT_BRANCH
     Author       $GIT_AUTHOR"
 
 # --- Step 6: Build Release Notes String ---
-RELEASE_NOTES="Environment: $FLAVOR
-BuildType: $BUILD_TYPE
+RELEASE_NOTES="Environment: $FLAVOR$BUILD_TYPE
 Branch: $GIT_BRANCH
 Author: $GIT_AUTHOR
 Groups: $SELECTED_GROUPS
@@ -427,8 +425,7 @@ JSON_PAYLOAD=$(cat <<EOF
   "blocks": [
     {"type":"header","text":{"type":"plain_text","text":"New APK Build Available","emoji":true}},
     {"type":"divider"},
-    {"type":"section","text":{"type":"mrkdwn","text":"*Environment:*  \`${FLAVOR}\`"}},
-    {"type":"section","text":{"type":"mrkdwn","text":"*Build Type:*  \`${BUILD_TYPE}\`"}},
+    {"type":"section","text":{"type":"mrkdwn","text":"*Environment:*  \`${FLAVOR}${BUILD_TYPE}\`"}},
     {"type":"section","text":{"type":"mrkdwn","text":"*Branch:*  \`${GIT_BRANCH}\`"}},
     {"type":"section","text":{"type":"mrkdwn","text":"*Author:*  ${GIT_AUTHOR}"}},
     {"type":"section","text":{"type":"mrkdwn","text":"*Tester Groups:*  \`${SELECTED_GROUPS}\`"}},

@@ -117,8 +117,7 @@ jobs:
               "blocks": [
                 {"type":"header","text":{"type":"plain_text","text":"New APK Build Available","emoji":true}},
                 {"type":"divider"},
-                {"type":"section","text":{"type":"mrkdwn","text":"*Environment:*  `${{ github.event.inputs.flavor }}`"}},
-                {"type":"section","text":{"type":"mrkdwn","text":"*Build Type:*  `${{ github.event.inputs.build_type }}`"}},
+                {"type":"section","text":{"type":"mrkdwn","text":"*Environment:*  `${{ github.event.inputs.flavor }}${{ github.event.inputs.build_type }}`"}},
                 {"type":"section","text":{"type":"mrkdwn","text":"*Branch:*  `${{ github.ref_name }}`"}},
                 {"type":"section","text":{"type":"mrkdwn","text":"*Author:*  ${{ github.actor }}"}},
                 {"type":"section","text":{"type":"mrkdwn","text":"*Tester Groups:*  `${{ github.event.inputs.tester_groups }}`"}},
