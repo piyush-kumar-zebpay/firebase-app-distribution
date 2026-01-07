@@ -66,7 +66,7 @@ jobs:
           echo "$FIREBASE_SERVICE_ACCOUNT" > service-key.json
 
       - name: Build APK
-        run: ./gradlew assemble${{ github.event.inputs.build_type }}
+        run: ./gradlew assemble${{ github.event.inputs.build_type }} --stacktrace --build-cache --parallel --no-daemon --configuration-cache
 
       - name: Upload APK to Firebase App Distribution
         run: |
