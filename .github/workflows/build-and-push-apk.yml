@@ -16,9 +16,14 @@ on:
         required: false
         default: 'Manual build from GitHub Actions'
       tester_groups:
-        description: 'Tester Groups (comma-separated)'
-        required: false
+        description: 'Tester Group'
+        required: true
         default: 'qa'
+        type: choice
+        options:
+          - qa
+          - qa-team
+          - devs
 
 jobs:
   build-and-distribute:
