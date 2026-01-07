@@ -1,4 +1,4 @@
-name: Build and Push APK
+name: Build and Distribute APK
 
 on:
   workflow_dispatch:

@@ -38,7 +38,7 @@ android {
             versionNameSuffix = "-uat"
             isDefault = true
         }
-        create("prod") {
+        create("production") {
             dimension = "env"
         }
     }
