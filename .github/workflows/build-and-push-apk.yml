@@ -79,8 +79,7 @@ jobs:
 
       - name: Upload APK to Firebase App Distribution
         run: |
-          RELEASE_NOTES="Flavor: ${{ github.event.inputs.flavor }}
-          BuildType: ${{ github.event.inputs.build_type }}
+          RELEASE_NOTES="Environment: ${{ github.event.inputs.flavor }}${{ github.event.inputs.build_type }}
           Branch: ${{ github.ref_name }}
           Author: ${{ github.actor }}
           Groups: ${{ github.event.inputs.tester_groups }}
