@@ -3,10 +3,19 @@ name: Build and Push APK
 on:
   workflow_dispatch:
     inputs:
+      flavor:
+        description: 'Product Flavor'
+        required: true
+        default: 'Uat'
+        type: choice
+        options:
+          - Stage
+          - Uat
+          - Prod
       build_type:
         description: 'Build Type'
         required: true
-        default: 'Release'
+        default: 'Debug'
         type: choice
         options:
           - Debug
@@ -66,18 +75,19 @@ jobs:
           echo "$FIREBASE_SERVICE_ACCOUNT" > service-key.json
 
       - name: Build APK
-        run: ./gradlew assemble${{ github.event.inputs.build_type }} --stacktrace --build-cache --parallel --no-daemon --configuration-cache
+        run: ./gradlew assemble${{ github.event.inputs.flavor }}${{ github.event.inputs.build_type }} --stacktrace --build-cache --parallel --no-daemon --configuration-cache
 
       - name: Upload APK to Firebase App Distribution
         run: |
-          RELEASE_NOTES="BuildType: ${{ github.event.inputs.build_type }}
+          RELEASE_NOTES="Flavor: ${{ github.event.inputs.flavor }}
+          BuildType: ${{ github.event.inputs.build_type }}
           Branch: ${{ github.ref_name }}
           Author: ${{ github.actor }}
           Groups: ${{ github.event.inputs.tester_groups }}
           ---
           ${{ github.event.inputs.release_description }}"
           
-          ./gradlew appDistributionUpload${{ github.event.inputs.build_type }} \
+          ./gradlew appDistributionUpload${{ github.event.inputs.flavor }}${{ github.event.inputs.build_type }} \
             --releaseNotes="$RELEASE_NOTES" \
             --groups="${{ github.event.inputs.tester_groups }}"
         env:
@@ -86,8 +96,8 @@ jobs:
       - name: Upload APK as Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-${{ github.event.inputs.build_type }}-${{ github.run_number }}
-          path: app/build/outputs/apk/**/*.apk
+          name: app-${{ github.event.inputs.flavor }}-${{ github.event.inputs.build_type }}-${{ github.run_number }}
+          path: app/build/outputs/apk/${{ github.event.inputs.flavor }}/${{ github.event.inputs.build_type }}/**/*.apk
           retention-days: 30
 
       - name: Send Slack Notification
@@ -107,6 +117,7 @@ jobs:
               "blocks": [
                 {"type":"header","text":{"type":"plain_text","text":"New APK Build Available","emoji":true}},
                 {"type":"divider"},
+                {"type":"section","text":{"type":"mrkdwn","text":"*Environment:*  `${{ github.event.inputs.flavor }}`"}},
                 {"type":"section","text":{"type":"mrkdwn","text":"*Build Type:*  `${{ github.event.inputs.build_type }}`"}},
                 {"type":"section","text":{"type":"mrkdwn","text":"*Branch:*  `${{ github.ref_name }}`"}},
                 {"type":"section","text":{"type":"mrkdwn","text":"*Author:*  ${{ github.actor }}"}},

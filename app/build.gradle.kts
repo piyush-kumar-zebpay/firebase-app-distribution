@@ -14,6 +14,7 @@ android {
         version = release(36)
     }
 
+
     defaultConfig {
         applicationId = "com.example.firebase_app_distribution"
         minSdk = 26
@@ -24,6 +25,24 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    flavorDimensions += "env"
+    productFlavors {
+        create("stage") {
+            dimension = "env"
+            applicationIdSuffix = ".stage"
+            versionNameSuffix = "-stage"
+        }
+        create("uat") {
+            dimension = "env"
+            applicationIdSuffix = ".uat"
+            versionNameSuffix = "-uat"
+            isDefault = true
+        }
+        create("prod") {
+            dimension = "env"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -31,6 +50,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            firebaseAppDistribution {
+                serviceCredentialsFile = rootProject.file("service-key.json").absolutePath
+            }
         }
         debug {
             firebaseAppDistribution {

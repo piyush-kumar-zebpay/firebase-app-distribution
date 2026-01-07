@@ -303,12 +303,17 @@ show_multiline_input() {
 # ==============================================================================
 # The core logic of the script starts here.
 
-# --- Step 1: Select Build Type ---
-show_single_select_menu "Select build type" "" "Debug" "Release"
-BUILD_TYPE="$MENU_RESULT"
-INFO_1="  ${ORANGE}${ICON_SUCCESS}${RESET} Build type: $BUILD_TYPE"
+# --- Step 1: Select Environment ---
+show_single_select_menu "Select environment" "" "UAT" "Stage" "Prod"
+FLAVOR="$MENU_RESULT"
+INFO_0="  ${ORANGE}${ICON_SUCCESS}${RESET} Environment: $FLAVOR"
 
-# --- Step 2: Enter Description (Multiline) ---
+# --- Step 2: Select Build Type ---
+show_single_select_menu "Select build type" "$INFO_0" "Debug" "Release"
+BUILD_TYPE="$MENU_RESULT"
+INFO_1="${INFO_0}\n  ${ORANGE}${ICON_SUCCESS}${RESET} Build type: $BUILD_TYPE"
+
+# --- Step 3: Enter Description (Multiline) ---
 show_multiline_input "Enter release description" "$DEFAULT_DESCRIPTION" "$INFO_1"
 DESCRIPTION="$MENU_RESULT"
 # Show first line only in info summary
@@ -316,29 +321,31 @@ DESCRIPTION_PREVIEW=$(echo -e "$DESCRIPTION" | head -n1)
 [ "$(echo -e "$DESCRIPTION" | wc -l)" -gt 1 ] && DESCRIPTION_PREVIEW="${DESCRIPTION_PREVIEW}..."
 INFO_2="${INFO_1}\n  ${ORANGE}${ICON_SUCCESS}${RESET} Description: $DESCRIPTION_PREVIEW"
 
-# --- Step 3: Select Groups ---
+# --- Step 4: Select Groups ---
 show_multi_select_menu "Select tester group(s)" "$INFO_2" "${DEFAULT_TESTER_GROUPS[@]}"
 SELECTED_GROUPS="$MENU_RESULT"
 
-# --- Step 4: Gather Information ---
+# --- Step 5: Gather Information ---
 GIT_BRANCH=$(get_git_branch)
 GIT_AUTHOR=$(get_git_author)
 
-SUMMARY_TEXT="    Build Type   $BUILD_TYPE
+SUMMARY_TEXT="    Environment  $FLAVOR
+    Build Type   $BUILD_TYPE
     Description  $DESCRIPTION
     Groups       $SELECTED_GROUPS
     Branch       $GIT_BRANCH
     Author       $GIT_AUTHOR"
 
-# --- Step 5: Build Release Notes String ---
-RELEASE_NOTES="BuildType: $BUILD_TYPE
+# --- Step 6: Build Release Notes String ---
+RELEASE_NOTES="Environment: $FLAVOR
+BuildType: $BUILD_TYPE
 Branch: $GIT_BRANCH
 Author: $GIT_AUTHOR
 Groups: $SELECTED_GROUPS
 ---
 $(echo -e "$DESCRIPTION")"
 
-# --- Step 6: Confirmation ---
+# --- Step 7: Confirmation ---
 show_confirm_menu "$SUMMARY_TEXT"
 CONFIRMED="$MENU_RESULT"
 
@@ -352,7 +359,7 @@ fi
 
 
 
-# --- Step 7: Build & Upload ---
+# --- Step 8: Build & Upload ---
 clear
 show_banner
 echo -e "  ${DARK_GRAY}----------------------------------------${RESET}"
@@ -363,9 +370,10 @@ echo -e "  ${ORANGE}${ICON_SUCCESS}${RESET} Release notes prepared"
 echo ""
 
 # Run Assembler
-echo -e "  ${ORANGE}${ICON_ARROW}${RESET} ${DARK_GRAY}Running${RESET} ${ORANGE}./gradlew assemble${BUILD_TYPE}${RESET}"
+TASK_NAME="assemble${FLAVOR}${BUILD_TYPE}"
+echo -e "  ${ORANGE}${ICON_ARROW}${RESET} ${DARK_GRAY}Running${RESET} ${ORANGE}./gradlew $TASK_NAME${RESET}"
 echo ""
-./gradlew "assemble${BUILD_TYPE}"
+./gradlew "$TASK_NAME"
 
 if [ $? -eq 0 ]; then
     echo ""
@@ -377,10 +385,11 @@ else
 fi
 
 # Run Uploader
+UPLOAD_TASK_NAME="appDistributionUpload${FLAVOR}${BUILD_TYPE}"
 echo ""
-echo -e "  ${ORANGE}${ICON_ARROW}${RESET} ${DARK_GRAY}Running${RESET} ${ORANGE}./gradlew appDistributionUpload${BUILD_TYPE}${RESET}"
+echo -e "  ${ORANGE}${ICON_ARROW}${RESET} ${DARK_GRAY}Running${RESET} ${ORANGE}./gradlew $UPLOAD_TASK_NAME${RESET}"
 echo ""
-./gradlew "appDistributionUpload${BUILD_TYPE}" --releaseNotes="$RELEASE_NOTES" --groups="$SELECTED_GROUPS"
+./gradlew "$UPLOAD_TASK_NAME" --releaseNotes="$RELEASE_NOTES" --groups="$SELECTED_GROUPS"
 
 if [ $? -eq 0 ]; then
     echo ""
@@ -418,6 +427,7 @@ JSON_PAYLOAD=$(cat <<EOF
   "blocks": [
     {"type":"header","text":{"type":"plain_text","text":"New APK Build Available","emoji":true}},
     {"type":"divider"},
+    {"type":"section","text":{"type":"mrkdwn","text":"*Environment:*  \`${FLAVOR}\`"}},
     {"type":"section","text":{"type":"mrkdwn","text":"*Build Type:*  \`${BUILD_TYPE}\`"}},
     {"type":"section","text":{"type":"mrkdwn","text":"*Branch:*  \`${GIT_BRANCH}\`"}},
     {"type":"section","text":{"type":"mrkdwn","text":"*Author:*  ${GIT_AUTHOR}"}},
