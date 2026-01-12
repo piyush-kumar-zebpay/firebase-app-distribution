@@ -387,15 +387,33 @@ UPLOAD_TASK_NAME="appDistributionUpload${FLAVOR}${BUILD_TYPE}"
 echo ""
 echo -e "  ${ORANGE}${ICON_ARROW}${RESET} ${DARK_GRAY}Running${RESET} ${ORANGE}./gradlew $UPLOAD_TASK_NAME${RESET}"
 echo ""
-./gradlew "$UPLOAD_TASK_NAME" --releaseNotes="$RELEASE_NOTES" --groups="$SELECTED_GROUPS"
 
-if [ $? -eq 0 ]; then
+# Use a temporary file to capture output while preserving valid exit codes with pipefail
+OUTPUT_FILE=$(mktemp)
+set -o pipefail
+./gradlew "$UPLOAD_TASK_NAME" --releaseNotes="$RELEASE_NOTES" --groups="$SELECTED_GROUPS" | tee "$OUTPUT_FILE"
+UPLOAD_STATUS=$?
+set +o pipefail
+
+if [ $UPLOAD_STATUS -eq 0 ]; then
     echo ""
     echo -e "  ${ORANGE}----------------------------------------${RESET}"
     echo -e "  ${ORANGE}${ICON_STAR}${RESET} ${WHITE}Upload complete!${RESET}"
     echo -e "  ${ORANGE}----------------------------------------${RESET}"
     echo ""
+    
+    # Extract the Tester Share Link
+    # Looks for: "Share this release with testers who have access: https://..."
+    DISTRIBUTION_URL=$(grep "Share this release with testers who have access:" "$OUTPUT_FILE" | sed -E 's/.*(https:\/\/.*)/\1/' | tr -d '\r')
+    
+    # Fallback if extraction fails
+    if [ -z "$DISTRIBUTION_URL" ]; then
+        DISTRIBUTION_URL="https://console.firebase.google.com/project/_/appdistribution"
+    fi
+    
+    rm -f "$OUTPUT_FILE"
 else
+    rm -f "$OUTPUT_FILE"
     echo ""
     echo -e "  ${RED}X Upload failed${RESET}"
     exit 1
@@ -403,7 +421,6 @@ fi
 
 # --- Step 8: Send Slack Notification ---
 SLACK_WEBHOOK_URL="$(cat ./webhook-url.txt)"
-FIREBASE_CONSOLE_URL="https://console.firebase.google.com/project/_/appdistribution"
 TIMESTAMP=$(date +%s)
 
 # Format description for Slack (add > prefix for quote formatting)
@@ -431,7 +448,7 @@ JSON_PAYLOAD=$(cat <<EOF
     {"type":"section","text":{"type":"mrkdwn","text":"*Tester Groups:*  \`${SELECTED_GROUPS}\`"}},
     {"type":"section","text":{"type":"mrkdwn","text":"*Description:*\n${DESCRIPTION_SLACK}"}},
     {"type":"divider"},
-    {"type":"section","text":{"type":"mrkdwn","text":"*View this release in Firebase Console*"},"accessory":{"type":"button","text":{"type":"plain_text","text":"Open Console","emoji":true},"url":"${FIREBASE_CONSOLE_URL}","style":"primary"}},
+    {"type":"section","text":{"type":"mrkdwn","text":"*Download & Install*"},"accessory":{"type":"button","text":{"type":"plain_text","text":"Download APK","emoji":true},"url":"${DISTRIBUTION_URL}","style":"primary"}},
     {"type":"divider"},
     {"type":"context","elements":[{"type":"mrkdwn","text":"*Firebase App Distribution* | <!date^${TIMESTAMP}^{date_short_pretty} at {time}|Posted>"}]}
   ]

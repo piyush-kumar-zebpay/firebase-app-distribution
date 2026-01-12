@@ -34,6 +34,9 @@ on:
           - qa-team
           - devs
 
+  repository_dispatch:
+    types: [build-apk]
+
 jobs:
   build-and-distribute:
     runs-on: ubuntu-latest
@@ -41,6 +44,21 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      - name: Setup Inputs
+        id: setup_inputs
+        run: |
+          if [ "${{ github.event_name }}" == "repository_dispatch" ]; then
+            echo "FLAVOR=${{ github.event.client_payload.flavor }}" >> $GITHUB_ENV
+            echo "BUILD_TYPE=${{ github.event.client_payload.build_type }}" >> $GITHUB_ENV
+            echo "TESTER_GROUPS=${{ github.event.client_payload.tester_groups }}" >> $GITHUB_ENV
+            echo "RELEASE_DESCRIPTION=${{ github.event.client_payload.release_description }}" >> $GITHUB_ENV
+          else
+            echo "FLAVOR=${{ github.event.inputs.flavor }}" >> $GITHUB_ENV
+            echo "BUILD_TYPE=${{ github.event.inputs.build_type }}" >> $GITHUB_ENV
+            echo "TESTER_GROUPS=${{ github.event.inputs.tester_groups }}" >> $GITHUB_ENV
+            echo "RELEASE_DESCRIPTION=${{ github.event.inputs.release_description }}" >> $GITHUB_ENV
+          fi
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -75,20 +93,34 @@ jobs:
           echo "$FIREBASE_SERVICE_ACCOUNT" > service-key.json
 
       - name: Build APK
-        run: ./gradlew assemble${{ github.event.inputs.flavor }}${{ github.event.inputs.build_type }} --stacktrace --build-cache --parallel --no-daemon --configuration-cache
+        run: ./gradlew assemble${{ env.FLAVOR }}${{ env.BUILD_TYPE }} --stacktrace --build-cache --parallel --no-daemon --configuration-cache
 
       - name: Upload APK to Firebase App Distribution
         run: |
-          RELEASE_NOTES="Environment: ${{ github.event.inputs.flavor }}${{ github.event.inputs.build_type }}
+          RELEASE_NOTES="Environment: ${{ env.FLAVOR }}${{ env.BUILD_TYPE }}
           Branch: ${{ github.ref_name }}
           Author: ${{ github.actor }}
-          Groups: ${{ github.event.inputs.tester_groups }}
+          Groups: ${{ env.TESTER_GROUPS }}
           ---
-          ${{ github.event.inputs.release_description }}"
+          ${{ env.RELEASE_DESCRIPTION }}"
           
-          ./gradlew appDistributionUpload${{ github.event.inputs.flavor }}${{ github.event.inputs.build_type }} \
+          # Use pipefail to catch build errors even when piping
+          set -o pipefail
+          
+          ./gradlew appDistributionUpload${{ env.FLAVOR }}${{ env.BUILD_TYPE }} \
             --releaseNotes="$RELEASE_NOTES" \
-            --groups="${{ github.event.inputs.tester_groups }}"
+            --groups="${{ env.TESTER_GROUPS }}" | tee upload_output.txt
+            
+          # Extract the Tester Share Link
+          # Looks for: "Share this release with testers who have access: https://..."
+          DISTRIBUTION_URL=$(grep "Share this release with testers who have access:" upload_output.txt | sed -E 's/.*(https:\/\/.*)/\1/' | tr -d '\r')
+          
+          if [ -z "$DISTRIBUTION_URL" ]; then
+             echo "DISTRIBUTION_URL=https://console.firebase.google.com/project/_/appdistribution" >> $GITHUB_ENV
+          else
+             echo "DISTRIBUTION_URL=$DISTRIBUTION_URL" >> $GITHUB_ENV
+          fi
+
         env:
           GOOGLE_APPLICATION_CREDENTIALS: service-key.json
 
@@ -98,10 +130,9 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
           TIMESTAMP=$(date +%s)
-          FIREBASE_CONSOLE_URL="https://console.firebase.google.com/project/_/appdistribution"
           
           # Escape description for JSON (handle multiline)
-          DESCRIPTION=$(echo '${{ github.event.inputs.release_description }}' | sed 's/\\/\\\\/g; s/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n>/g')
+          DESCRIPTION=$(echo '${{ env.RELEASE_DESCRIPTION }}' | sed 's/\\/\\\\/g; s/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n>/g')
           
           curl -X POST -H 'Content-type: application/json' \
             --data '{
@@ -109,13 +140,13 @@ jobs:
               "blocks": [
                 {"type":"header","text":{"type":"plain_text","text":"New APK Build Available","emoji":true}},
                 {"type":"divider"},
-                {"type":"section","text":{"type":"mrkdwn","text":"*Environment:*  `${{ github.event.inputs.flavor }}${{ github.event.inputs.build_type }}`"}},
+                {"type":"section","text":{"type":"mrkdwn","text":"*Environment:*  `${{ env.FLAVOR }}${{ env.BUILD_TYPE }}`"}},
                 {"type":"section","text":{"type":"mrkdwn","text":"*Branch:*  `${{ github.ref_name }}`"}},
                 {"type":"section","text":{"type":"mrkdwn","text":"*Author:*  ${{ github.actor }}"}},
-                {"type":"section","text":{"type":"mrkdwn","text":"*Tester Groups:*  `${{ github.event.inputs.tester_groups }}`"}},
+                {"type":"section","text":{"type":"mrkdwn","text":"*Tester Groups:*  `${{ env.TESTER_GROUPS }}`"}},
                 {"type":"section","text":{"type":"mrkdwn","text":"*Description:*\n>'"$DESCRIPTION"'"}},
                 {"type":"divider"},
-                {"type":"section","text":{"type":"mrkdwn","text":"*View this release in Firebase Console*"},"accessory":{"type":"button","text":{"type":"plain_text","text":"Open Console","emoji":true},"url":"'"$FIREBASE_CONSOLE_URL"'","style":"primary"}},
+                {"type":"section","text":{"type":"mrkdwn","text":"*Download & Install*"},"accessory":{"type":"button","text":{"type":"plain_text","text":"Download APK","emoji":true},"url":"${{ env.DISTRIBUTION_URL }}","style":"primary"}},
                 {"type":"divider"},
                 {"type":"context","elements":[{"type":"mrkdwn","text":"*Firebase App Distribution* | <!date^'"$TIMESTAMP"'^{date_short_pretty} at {time}|Posted>"}]}
               ]
